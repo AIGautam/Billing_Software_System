@@ -22,7 +22,7 @@ The container initializes `billing_app` from `billing_app.sql` the first time `/
 This workflow deploys to:
 
 - EC2 user: `ubuntu`
-- EC2 host: `13.55.135.40`
+- EC2 host: `52.62.111.84`
 - App port: `80`
 
 MySQL runs inside the app container and is persisted on EC2 at `/home/ubuntu/billing-software/mysql`.
