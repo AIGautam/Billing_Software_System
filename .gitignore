@@ -1,0 +1,4 @@
+.codex-tmp/
+frontend/dist/
+frontend/node_modules/
+backend/target/

@@ -1,0 +1,11 @@
+.git
+.github
+**/node_modules
+**/dist
+**/target
+**/.DS_Store
+**/.env
+backend/uploads
+*.tar
+*.tar.gz
+.codex-tmp

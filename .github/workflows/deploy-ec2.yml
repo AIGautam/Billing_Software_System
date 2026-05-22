@@ -1,0 +1,117 @@
+name: Build and Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: billing-software
+  CONTAINER_NAME: billing-software
+  EC2_HOST: 3.25.211.78
+  EC2_USER: ubuntu
+  APP_DIR: /home/ubuntu/billing-software
+  APP_PORT: 80
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+        run: npm run build
+
+      - name: Test backend
+        working-directory: backend
+        run: chmod +x mvnw && ./mvnw -B test
+
+      - name: Build Docker image
+        run: docker build --build-arg VITE_RAZORPAY_KEY_ID='${{ secrets.RAZORPAY_KEY_ID }}' -t "$IMAGE_NAME:${GITHUB_SHA}" -t "$IMAGE_NAME:latest" .
+
+      - name: Save Docker image
+        run: docker save "$IMAGE_NAME:${GITHUB_SHA}" | gzip > billing-software-image.tar.gz
+
+      - name: Prepare deployment env
+        run: |
+          {
+            printf '%s\n' 'SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}'
+            printf '%s\n' 'SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}'
+            printf '%s\n' 'SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}'
+            printf '%s\n' "SPRING_JPA_HIBERNATE_DDL_AUTO=${{ secrets.SPRING_JPA_HIBERNATE_DDL_AUTO || 'update' }}"
+            printf '%s\n' 'JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}'
+            printf '%s\n' 'RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}'
+            printf '%s\n' 'RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}'
+            printf '%s\n' "CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS || 'http://3.25.211.78' }}"
+            printf '%s\n' 'UPLOAD_URL_PREFIX=/api/v1.0/uploads'
+          } > deploy.env
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copy image and env to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "mkdir -p '$APP_DIR'"
+          scp -i ~/.ssh/ec2_key billing-software-image.tar.gz deploy.env "$EC2_USER@$EC2_HOST:$APP_DIR/"
+
+      - name: Restart container on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" <<EOF
+          set -euo pipefail
+          if ! command -v docker >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y docker.io
+            sudo systemctl enable --now docker
+          fi
+          cd "$APP_DIR"
+          sudo docker load < billing-software-image.tar.gz
+          sudo docker stop "$CONTAINER_NAME" || true
+          sudo docker rm "$CONTAINER_NAME" || true
+          mkdir -p uploads
+          sudo docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            --env-file deploy.env \
+            --add-host=host.docker.internal:host-gateway \
+            -p "$APP_PORT:80" \
+            -v "$APP_DIR/uploads:/app/uploads" \
+            "$IMAGE_NAME:${GITHUB_SHA}"
+          sudo docker image prune -f
+          EOF
