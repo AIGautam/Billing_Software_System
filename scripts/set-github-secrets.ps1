@@ -5,7 +5,7 @@ param(
     [string]$Repo = "AIGautam/Billing_Software_System",
     [string]$DatasourceUrl = "jdbc:mariadb://127.0.0.1:3306/billing_app",
     [string]$DatasourceUsername = "root",
-    [string]$DatasourcePassword = "",
+    [string]$DatasourcePassword = "change-me",
     [string]$DdlAuto = "update",
     [string]$JwtSecretKey = "",
     [string]$RazorpayKeyId = "",
