@@ -82,12 +82,24 @@ jobs:
             printf '%s\n' 'UPLOAD_URL_PREFIX=/api/v1.0/uploads'
           } > deploy.env
 
+      - name: Verify EC2 reachability
+        run: |
+          if ! timeout 15 bash -c "cat < /dev/null > /dev/tcp/$EC2_HOST/22"; then
+            echo "EC2 host $EC2_HOST is unreachable on port 22."
+            echo "Check that the instance is running, the public IP is correct, and the security group allows SSH."
+            exit 1
+          fi
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          if ! ssh-keyscan -T 10 -H "$EC2_HOST" >> ~/.ssh/known_hosts; then
+            echo "Failed to fetch the SSH host key from $EC2_HOST."
+            echo "Check that the EC2 instance is reachable and accepting SSH connections on port 22."
+            exit 1
+          fi
 
       - name: Copy image and env to EC2
         run: |
