@@ -101,10 +101,10 @@ jobs:
             exit 1
           fi
 
-      - name: Copy image and env to EC2
+      - name: Copy env to EC2
         run: |
           ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "mkdir -p '$APP_DIR'"
-          scp -i ~/.ssh/ec2_key billing-software-image.tar.gz deploy.env "$EC2_USER@$EC2_HOST:$APP_DIR/"
+          scp -i ~/.ssh/ec2_key deploy.env "$EC2_USER@$EC2_HOST:$APP_DIR/"
 
       - name: Restart container on EC2
         run: |
@@ -116,9 +116,18 @@ jobs:
             sudo systemctl enable --now docker
           fi
           cd "$APP_DIR"
-          sudo docker load < billing-software-image.tar.gz
           sudo docker stop "$CONTAINER_NAME" || true
           sudo docker rm "$CONTAINER_NAME" || true
+          sudo docker images "$IMAGE_NAME" --format '{{.Repository}}:{{.Tag}}' | xargs -r sudo docker rmi -f || true
+          sudo docker system prune -af || true
+          rm -f billing-software-image.tar.gz
+          EOF
+
+          gunzip -c billing-software-image.tar.gz | ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" "sudo docker load"
+
+          ssh -i ~/.ssh/ec2_key "$EC2_USER@$EC2_HOST" <<EOF
+          set -euo pipefail
+          cd "$APP_DIR"
           mkdir -p uploads mysql
           sudo docker run -d \
             --name "$CONTAINER_NAME" \
