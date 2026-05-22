@@ -6,6 +6,8 @@
 **/.DS_Store
 **/.env
 backend/uploads
+uploads
+mysql
 *.tar
 *.tar.gz
 .codex-tmp

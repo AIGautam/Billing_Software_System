@@ -4,16 +4,18 @@
 
 - `backend` - Spring Boot API
 - `frontend` - React/Vite UI
-- `Dockerfile` - production image that serves both UI and API from one container
+- `Dockerfile` - production image that runs MySQL, the API, and the UI from one container
 
 ## Local Docker Build
 
 ```bash
 docker build -t billing-software:local .
-docker run --env-file .env -p 80:80 -v "%cd%/uploads:/app/uploads" billing-software:local
+docker run --env-file .env -p 80:80 -v "%cd%/uploads:/app/uploads" -v "%cd%/mysql:/var/lib/mysql" billing-software:local
 ```
 
 Use `.env.example` as the template for runtime variables.
+
+The container initializes `billing_app` from `billing_app.sql` the first time `/var/lib/mysql` is empty. Keep the MySQL volume mounted if you want database data to survive container rebuilds.
 
 ## GitHub Actions EC2 Secrets
 
@@ -23,17 +25,11 @@ This workflow deploys to:
 - EC2 host: `3.25.211.78`
 - App port: `80`
 
-If MySQL runs directly on the EC2 host, use:
-
-```text
-SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3306/billing_app
-```
+MySQL runs inside the app container and is persisted on EC2 at `/home/ubuntu/billing-software/mysql`.
 
 Add these repository secrets before enabling deploys from `main`:
 
 - `EC2_SSH_PRIVATE_KEY`
-- `SPRING_DATASOURCE_URL`
-- `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
 - `SPRING_JPA_HIBERNATE_DDL_AUTO`
 - `JWT_SECRET_KEY`
