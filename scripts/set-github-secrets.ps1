@@ -10,7 +10,7 @@ param(
     [string]$JwtSecretKey = "",
     [string]$RazorpayKeyId = "",
     [string]$RazorpayKeySecret = "",
-    [string]$CorsAllowedOrigins = "http://3.25.211.78",
+    [string]$CorsAllowedOrigins = "http://13.55.135.40",
     [switch]$InstallGitHubCli
 )
 
