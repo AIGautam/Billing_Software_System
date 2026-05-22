@@ -31,6 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
-
-
-application.properties
+# Keep application.properties committed; it only contains environment-backed defaults.
+# Put machine-specific overrides in local-only property files.
+application-local.properties
+application-*.local.properties
